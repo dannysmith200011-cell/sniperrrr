@@ -1,7 +1,7 @@
 name: TikTok Bulk Harvester
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # ده اللي بيعملك الزرار اليدوي في صفحة Actions
 
 permissions:
   contents: write
@@ -32,11 +32,11 @@ jobs:
       - name: Run Harvester Script
         run: python bulk_sniper.py
 
-      - name: Save Both Archives
+      - name: Save Bulk Archive
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add bulk_archive.txt failed_archive.txt || echo "No files to add"
-          git commit -m "Update success and failed archives" || echo "No changes to commit"
+          git add bulk_archive.txt
+          git commit -m "Update bulk archive" || echo "No changes to commit"
           git pull origin main --rebase 
           git push
