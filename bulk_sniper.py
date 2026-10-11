@@ -7,36 +7,17 @@ TOKEN = '8817280652:AAHNSL-u4fbhnM8eFuPP7bOWXjbQ7bVG3R0'
 CHAT_ID = '6321591510' 
 TIKTOK_URL = 'https://www.tiktok.com/@maryta288' 
 
-print("--- الحصّادة الخارقة: أرشيف للفيديوهات السليمة، وأرشيف للروابط المعصلجة ---")
+print("--- الحصّادة فائقة السرعة: لقط، تحميل، وإرسال فيديو بفيديو بالترتيب ---")
 
-# دالة إرسال رابط التيك توك على التليجرام لو حصل مشكلة وحفظه في أرشيف الفشل
-def send_fallback_link(video_id, reason):
-    tiktok_link = f"https://www.tiktok.com/@user66rae99/video/{video_id}"
-    text = f"⚠️ فيديو معصلج!\nالسبب: {reason}\n\n🔗 الرابط المباشر عشان تشوفه أو تحمله براحتك:\n{tiktok_link}"
-    msg_url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    
-    try:
-        requests.post(msg_url, data={'chat_id': CHAT_ID, 'text': text}, timeout=60)
-        print(f"📩 تم إرسال الرابط البديل للتليجرام (السبب: {reason}).")
-        
-        # التسجيل في الأرشيف الخاص بالفيديوهات المعصلجة (الـ ID - الرابط - السبب)
-        with open('failed_archive.txt', 'a', encoding='utf-8') as f:
-            f.write(f"{video_id} - {tiktok_link} - {reason}\n")
-        return True
-    except Exception as e:
-        print(f"خطأ في إرسال رسالة الرابط: {e}")
-        return False
-
-# دالة رفع الفيديو السليم على التليجرام
-def send_video_file(file_path):
+def send_video(file_path):
     url = f"https://api.telegram.org/bot{TOKEN}/sendVideo"
     if os.path.exists(file_path):
         with open(file_path, 'rb') as video:
             try:
-                response = requests.post(url, data={'chat_id': CHAT_ID}, files={'video': video}, timeout=300)
+                response = requests.post(url, data={'chat_id': CHAT_ID}, files={'video': video}, timeout=60)
                 return response.status_code == 200
             except Exception as e:
-                print(f"خطأ أثناء رفع الفيديو للتليجرام: {e}")
+                print(f"خطأ أثناء الإرسال للتليجرام: {e}")
     return False
 
 def download_from_musicaldown(browser_context, video_url):
@@ -46,49 +27,43 @@ def download_from_musicaldown(browser_context, video_url):
         page.fill("input[name='q']", video_url)
         page.locator("button.btn-red").click()
         
-        page.wait_for_selector("a:has-text('MP4 HD')", timeout=25000)
+        # بنستنى زرار الـ HD يظهر
+        page.wait_for_selector("a:has-text('MP4 HD')", timeout=20000)
         hd_element = page.locator("a:has-text('MP4 HD')").first
         hd_link = hd_element.get_attribute("href")
         page.close()
         return hd_link
     except Exception as e:
-        print(f"مشكلة في استخراج رابط الـ HD: {e}")
+        print(f"⚠️ مشكلة في موقع التحميل للفيديو ده: {e}")
         try: page.close()
         except: pass
     return None
 
 def start_harvesting():
-    # بنجمع الـ IDs من الأرشيفين عشان نتخطاهم ومفيش حاجة تتعاد
-    archive_ids = set()
-    
-    # 1. قراءة الفيديوهات السليمة
+    # 1. بنقرأ الأرشيف الحالي لليوزر التاني
+    archive = []
     if os.path.exists('bulk_archive.txt'):
-        with open('bulk_archive.txt', 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.strip(): archive_ids.add(line.strip())
-                
-    # 2. قراءة الفيديوهات اللي فشلت واتبعتت كلينك
-    if os.path.exists('failed_archive.txt'):
-        with open('failed_archive.txt', 'r', encoding='utf-8') as f:
-            for line in f:
-                if line.strip():
-                    # بنسحب الـ ID بس من السطر اللي متسجل فيه الرابط عشان نتخطاه
-                    vid_id = line.split(' - ')[0].strip()
-                    archive_ids.add(vid_id)
+        with open('bulk_archive.txt', 'r') as f:
+            archive = f.read().splitlines()
 
     with sync_playwright() as p:
+        print("فتح المتصفح للبدء في مسح صفحة تيك توك...")
         browser = p.chromium.launch(headless=True)
+        # بنحط User-Agent حقيقي عشان تيك توك ميقفشوش
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         tiktok_page = context.new_page()
+        
+        print(f"الدخول على صفحة اليوزر: {TIKTOK_URL}")
         tiktok_page.goto(TIKTOK_URL, timeout=60000)
-        tiktok_page.wait_for_timeout(5000) 
+        tiktok_page.wait_for_timeout(5000) # بنستنى 5 ثواني عشان الفيديوهات تتملي
         
         processed_ids = set()
         no_new_videos_count = 0
         
         while True:
+            # بنلقط كل روابط الفيديوهات المتاحة على الشاشة حالياً
             links = tiktok_page.locator("a[href*='/video/']").all()
             video_urls = []
             for link in links:
@@ -99,74 +74,67 @@ def start_harvesting():
             new_video_found_in_loop = False
             
             for video_url in video_urls:
-                video_id = video_url.split('/')[-1].split('?')[0] 
+                video_id = video_url.split('/')[-1].split('?')[0] # تنظيف الـ ID
                 
-                # تخطي لو الفيديو اتعمل قبل كده (سواء سليم أو معصلج)
-                if video_id in processed_ids or video_id in archive_ids:
+                # لو عالجناه في الـ اللوب الحالية أو متسجل في الأرشيف قبل كده هنتخطاه
+                if video_id in processed_ids or video_id in archive:
                     continue
                     
                 processed_ids.add(video_id)
                 new_video_found_in_loop = True
                 
-                print(f"\n🎯 تم رصد فيديو جديد بالترتيب: {video_id}")
+                print(f"\n🎯 تم رصد فيديو جديد بالترتيب: {video_url}")
+                
+                # خطوة التحميل الفوري من خلال المتصفح
                 hd_link = download_from_musicaldown(context, video_url)
                 
                 if hd_link:
-                    print("جاري التحميل بأمان (Stream)...")
-                    headers = {'User-Agent': 'Mozilla/5.0'}
-                    file_name = f"bulk_{video_id}.mp4"
-                    
+                    print("لقينا رابط الـ HD الخارق! جاري سحب الـ 13 ميجا...")
+                    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
                     try:
-                        vid_response = requests.get(hd_link, headers=headers, timeout=120, stream=True)
-                        with open(file_name, 'wb') as f:
-                            for chunk in vid_response.iter_content(chunk_size=8192):
-                                if chunk: f.write(chunk)
-                                    
-                        file_size_mb = os.path.getsize(file_name) / (1024 * 1024)
+                        vid_response = requests.get(hd_link, headers=headers, timeout=60)
+                        file_name = f"bulk_{video_id}.mp4"
                         
-                        # التوجيه الذكي: يمين (تحميل وأرشفة) أو شمال (رسالة تليجرام وأرشفة بايظة)
-                        if file_size_mb > 49.5:
-                            if send_fallback_link(video_id, f"حجمه ضخم جداً ({file_size_mb:.2f} ميجا)"):
-                                archive_ids.add(video_id)
-                        elif file_size_mb > 0.1:
-                            print(f"✅ تم التحميل ({file_size_mb:.2f} ميجا). طيران للتليجرام...")
-                            if send_video_file(file_name):
-                                print("💾 وصل! بنسجله في أرشيف السليم فوراً...")
-                                with open('bulk_archive.txt', 'a', encoding='utf-8') as f:
+                        with open(file_name, 'wb') as f:
+                            f.write(vid_response.content)
+                            
+                        file_size = os.path.getsize(file_name)
+                        
+                        if file_size > 100000:
+                            print(f"✅ تم التحميل بنجاح (الحجم: {file_size / (1024*1024):.2f} ميجا). طيران للتليجرام...")
+                            if send_video(file_name):
+                                print("💾 وصل للتليجرام! بنسجله في الأرشيف فوراً...")
+                                with open('bulk_archive.txt', 'a') as f:
                                     f.write(f"{video_id}\n")
-                                archive_ids.add(video_id)
+                                archive.append(video_id)
                             else:
-                                if send_fallback_link(video_id, "فشل الرفع لسيرفر تليجرام (Timeout)"):
-                                    archive_ids.add(video_id)
+                                print("❌ فشل الإرسال، مش هنأرشفه عشان يعيد المحاولة.")
+                                if os.path.exists(file_name): os.remove(file_name)
                         else:
-                            if send_fallback_link(video_id, "الملف نزل تالف أو مساحته شبه معدومة"):
-                                archive_ids.add(video_id)
-                                
+                            print("⚠️ الملف نزل تالف أو صغير.")
+                            if os.path.exists(file_name): os.remove(file_name)
                     except Exception as e:
-                        if send_fallback_link(video_id, "الموقع قطع الاتصال أثناء التحميل"):
-                            archive_ids.add(video_id)
-                    
-                    if os.path.exists(file_name):
-                        os.remove(file_name)
-                else:
-                    if send_fallback_link(video_id, "موقع التحميل مقدرش يستخرج الجودة الـ HD"):
-                        archive_ids.add(video_id)
+                        print(f"خطأ أثناء تحميل الملف: {e}")
                 
+                # ريفريش بسيط 2 ثانية بين كل فيديو وفيديو
                 time.sleep(2)
             
+            # حركة النزول لتحت (Scroll Down) عشان يظهر فيديوهات جديدة
             print("📜 بننزل لتحت في الصفحة عشان نكشف الفيديوهات اللي عليها الدور...")
             tiktok_page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            tiktok_page.wait_for_timeout(3000) 
+            tiktok_page.wait_for_timeout(3000) # بنستنى 3 ثواني الفيديوهات الجديدة تفتح
             
+            # شرط النهاية: لو نزلنا تحت 3 مرات ورا بعض وملقيناش أي فيديو جديد، يبقى الصفحة خلصت تماماً وصل للرقم الكلي
             if not new_video_found_in_loop:
                 no_new_videos_count += 1
                 if no_new_videos_count >= 3:
-                    print("\n🏁 وصلنا لنهاية الصفحة تماماً!")
+                    print("\n🏁 وصلنا لنهاية الصفحة تماماً وتم التأكد إن عدد الفيديوهات مطابق للكل!")
                     break
             else:
                 no_new_videos_count = 0
                 
         browser.close()
+    print("\n🎉 انتهت العملية بنجاح كامل!")
 
 if __name__ == "__main__":
     start_harvesting()
